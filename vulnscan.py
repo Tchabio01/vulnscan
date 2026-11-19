@@ -18,7 +18,7 @@ except ImportError:
     print("    python -m pip install -r requirements.txt")
     sys.exit(1)
 
-__version__ = "3.3.0"
+__version__ = "3.3.1"
 OS_NAME = platform.system()  # Linux, Windows, Darwin
 
 
