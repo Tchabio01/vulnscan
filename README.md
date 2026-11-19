@@ -1,6 +1,6 @@
 # 🛡️ VulnScan
 
-Scanner pédagogique de vulnérabilités web pour Termux.
+Scanner pédagogique de vulnérabilités web — **Linux, macOS, Windows et Termux**.
 
 ## Fonctionnalités
 
@@ -9,24 +9,59 @@ Scanner pédagogique de vulnérabilités web pour Termux.
 - Support Basic Auth, cookie de session, headers custom
 - Rapports JSON + HTML avec preuves et remédiations
 - Deep crawl configurable
-- Détection de redirects "soft" (302 avec body)
+- Détection de redirects soft (302 avec body)
+
+## Prérequis
+
+- Python 3.8 ou supérieur
 
 ## Installation
 
-pkg install python -y
-pip install requests
+### Linux / macOS
+
+git clone https://github.com/Tchabio01/vulnscan.git
+cd vulnscan
+bash install.sh
+source .venv/bin/activate
+
+### Windows (PowerShell)
+
+git clone https://github.com/Tchabio01/vulnscan.git
+cd vulnscan
+powershell -ExecutionPolicy Bypass -File install.ps1
+
+### Termux
+
+pkg install git python -y
+git clone https://github.com/Tchabio01/vulnscan.git
+cd vulnscan
+bash install-termux.sh
+source .venv/bin/activate
+
+### Vérification
+
+vulnscan --version
+vulnscan --check
 
 ## Utilisation
 
-Mode interactif :
-python vulnscan.py
+### Mode interactif
 
-Mode CLI :
-python vulnscan.py https://exemple.com --full --html rapport.html
+vulnscan
 
-## Avertissement légal
+### Mode CLI
 
-Outil éducatif uniquement. À utiliser sur des cibles autorisées (tes sites, CTF, labs).
+vulnscan https://exemple.com --full --html rapport.html --json rapport.json
+
+### Options utiles
+
+vulnscan --help
+vulnscan --version
+vulnscan --check
+
+## Avertissement l’légal
+
+Outil éducatif uniquement. À utiliser sur des cibles autorisées (vos sites, CTF, labs).
 
 ## Auteur
 

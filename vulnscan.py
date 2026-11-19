@@ -567,12 +567,30 @@ MENU = f"""{C.BOLD}Que voulez-vous tester ?{C.END}
 """
 
 def ask_url():
+    print(f"{C.BOLD}Entrez l'URL ou l'IP de la cible a analyser.{C.END}")
+    print(f"{C.DIM}Exemples : https://exemple.com | http://192.168.1.10 | 192.168.1.10:8080{C.END}")
     while True:
-        u = input(f"{C.BOLD}URL cible > {C.END}").strip()
-        if not u: continue
-        if not u.startswith(('http://','https://')): u = 'https://' + u
-        if not urlparse(u).netloc: continue
-        return u.rstrip('/')
+        u = input(f"{C.BOLD}URL / IP cible > {C.END}").strip()
+        if not u:
+            print(f"{C.YELLOW}[!] Entrez une URL ou une IP.{C.END}")
+            continue
+        if u.lower() in ('q', 'quit', 'exit'):
+            return None
+        if not u.startswith(('http://', 'https://')):
+            is_private = any(u.startswith(p) for p in (
+                '192.168.', '10.', '172.16.', '172.17.', '172.18.',
+                '172.19.', '172.20.', '172.21.', '172.22.', '172.23.',
+                '172.24.', '172.25.', '172.26.', '172.27.', '172.28.',
+                '172.29.', '172.30.', '172.31.', '127.', 'localhost'
+            ))
+            u = ('http://' if is_private else 'https://') + u
+        parsed = urlparse(u)
+        if not parsed.netloc:
+            print(f"{C.RED}[!] URL invalide : {u}{C.END}")
+            continue
+        u = u.rstrip('/')
+        print(f"{C.GREEN}[+] Cible : {u}{C.END}")
+        return u
 
 def ask_delay():
     try:
