@@ -1,15 +1,25 @@
 #!/usr/bin/env python3
-"""VulnScan v3.2 - Audit pedagogique web - Termux"""
-import argparse, sys, time, json, re
+"""VulnScan v3.3 - Audit pedagogique web - Multiplateforme
+Compatible Linux, Windows, macOS, Termux.
+"""
+import argparse, sys, time, json, re, os, platform
 from urllib.parse import urlparse, parse_qs, urlunparse, urljoin
 from datetime import datetime
 
+if sys.version_info < (3, 8):
+    sys.exit("[!] Python 3.8+ requis. Vous avez " + platform.python_version())
+
 try:
     import requests
-    from requests.packages.urllib3.exceptions import InsecureRequestWarning
+    from urllib3.exceptions import InsecureRequestWarning
     requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 except ImportError:
-    print("[!] pip install requests"); sys.exit(1)
+    print("[!] Dependances manquantes. Installez avec :")
+    print("    python -m pip install -r requirements.txt")
+    sys.exit(1)
+
+__version__ = "3.3.0"
+OS_NAME = platform.system()  # Linux, Windows, Darwin
 
 
 class C:
@@ -527,7 +537,7 @@ th{{background:#2c3e50;color:#fff}}code{{background:#f4f4f4;padding:2px 4px;font
 
 BANNER = f"""{C.BOLD}{C.CYAN}
 ╔═══════════════════════════════════════════════════╗
-║      VulnScan v3.2  -  Termux                     ║
+║      VulnScan v{__version__}  -  {OS_NAME:<10}     ║
 ║  Usage educatif / CTF autorise uniquement         ║
 ╚═══════════════════════════════════════════════════╝
 {C.END}{C.YELLOW}[!] Cibles autorisees uniquement{C.END}
@@ -659,14 +669,29 @@ def mode_interactif():
 
 
 def main():
-    p = argparse.ArgumentParser()
-    p.add_argument('url', nargs='?')
+    p = argparse.ArgumentParser(
+        prog="vulnscan",
+        description="VulnScan - scanner pedagogique de vulnerabilites web",
+    )
+    p.add_argument('url', nargs='?', help="URL cible (ex: https://exemple.com)")
+    p.add_argument('--version', action='version',
+                   version=f"VulnScan {__version__} (Python {platform.python_version()})")
+    p.add_argument('--check', action='store_true',
+                   help="Verifie l'environnement et quitte")
     p.add_argument('--delay', type=float, default=0.5)
     p.add_argument('--full', action='store_true')
     p.add_argument('--json'); p.add_argument('--html')
     p.add_argument('--cookie'); p.add_argument('--user'); p.add_argument('--password')
     p.add_argument('--scan-protected')
     args = p.parse_args()
+
+    if args.check:
+        print(f"[i] OS         : {OS_NAME} {platform.release()}")
+        print(f"[i] Python     : {platform.python_version()}")
+        print(f"[i] requests   : {requests.__version__}")
+        print(f"[i] urllib3    : {__import__('urllib3').__version__}")
+        print("[+] Environnement OK")
+        return
 
     if not args.url:
         try: mode_interactif()

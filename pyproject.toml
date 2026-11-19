@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vulnscan"
+version = "3.3.0"
+description = "Scanner pedagogique de vulnerabilites web (Linux/Windows/macOS/Termux)"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [{ name = "Tchabio01" }]
+keywords = ["security", "scanner", "pentest", "web", "educational"]
+dependencies = [
+    "requests>=2.31.0",
+    "urllib3>=2.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/Tchabio01/vulnscan"
+Issues = "https://github.com/Tchabio01/vulnscan/issues"
+
+[project.scripts]
+vulnscan = "vulnscan:main"
+
+[tool.setuptools]
+py-modules = ["vulnscan"]
