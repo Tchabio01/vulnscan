@@ -2,6 +2,16 @@
 
 Scanner pédagogique de vulnérabilités web — **Linux, macOS, Windows et Termux**.
 
+## Téléchargement
+
+**[Dernière version : v3.3.1](https://github.com/Tchabio01/vulnscan/releases/latest)**
+
+| Plateforme | Fichier |
+|---|---|
+| Linux / macOS / Termux | [vulnscan-3.3.1.tar.gz](https://github.com/Tchabio01/vulnscan/releases/download/v3.3.1/vulnscan-3.3.1.tar.gz) |
+| Windows | [vulnscan-3.3.1.zip](https://github.com/Tchabio01/vulnscan/releases/download/v3.3.1/vulnscan-3.3.1.zip) |
+| Code source | [main.tar.gz](https://github.com/Tchabio01/vulnscan/archive/refs/heads/main.tar.gz) |
+
 ## Fonctionnalités
 
 - 18 techniques d'audit : headers, fichiers exposés, cookies, SQLi, XSS, IDOR, LFI, CSRF, CORS, Open Redirect
