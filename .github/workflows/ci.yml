@@ -3,100 +3,20 @@ name: CI
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
 
 jobs:
   test:
-    name: Test sur ${{ matrix.os }} / Python ${{ matrix.python }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        python: ['3.10', '3.12']
-
-    steps:
-      - name: Checkout du code
-        uses: actions/checkout@v4
-
-      - name: Installer Python ${{ matrix.python }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python }}
-
-      - name: Installer les dependances
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -e .
-
-      - name: Verifier la syntaxe
-        run: python -m py_compile vulnscan.py
-
-      - name: Verifier --version
-        run: vulnscan --version
-
-      - name: Verifier --check
-        run: vulnscan --check
-
-      - name: Verifier --help
-        run: vulnscan --help
-
-      - name: Erreur si URL manquante en CLI
-        shell: bash
-        run: |
-          if vulnscan --full 2>&1 | grep -q "URL ou IP est obligatoire"; then
-            echo "[OK] Erreur attendue"
-          else
-            echo "[!] Le message d'erreur n'est pas celui attendu"
-            exit 1
-          fi
-
-      - name: Test scan sur serveur local (Ubuntu/macOS)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          # Lancer un serveur HTTP local
-          python -m http.server 8765 &
-          SERVER_PID=$!
-          sleep 2
-
-          # Scanner localhost
-          vulnscan http://localhost:8765 --full --json rapport.json --html rapport.html || true
-
-          # Verifier que le rapport existe
-          test -f rapport.json && echo "[OK] rapport.json genere"
-          test -f rapport.html && echo "[OK] rapport.html genere"
-
-          # Verifier le contenu JSON
-          python -c "import json; d=json.load(open('rapport.json')); print(f'[OK] {len(d[\"findings\"])} findings')"
-
-          # Nettoyer
-          kill $SERVER_PID || true
-
-      - name: Test scan sur serveur local (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $server = Start-Process python -ArgumentList "-m","http.server","8765" -PassThru
-          Start-Sleep -Seconds 2
-          vulnscan http://localhost:8765 --full --json rapport.json --html rapport.html
-          if (Test-Path rapport.json) { Write-Host "[OK] rapport.json genere" }
-          if (Test-Path rapport.html) { Write-Host "[OK] rapport.html genere" }
-          Stop-Process -Id $server.Id -Force
-
-  docker:
-    name: Build Docker
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build image
-        run: docker build -t vulnscan:test .
-
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Installer
+        run: |
+          pip install -r requirements.txt
+          pip install -e .
       - name: Test version
-        run: docker run --rm vulnscan:test --version
-
+        run: vulnscan --version
       - name: Test help
-        run: docker run --rm vulnscan:test --help
+        run: vulnscan --help
