@@ -708,7 +708,7 @@ def main():
         prog="vulnscan",
         description="VulnScan - scanner pedagogique de vulnerabilites web",
     )
-    p.add_argument('url', nargs='?', help="URL cible (ex: https://exemple.com)")
+    p.add_argument('url', nargs='?', help="URL ou IP cible (obligatoire en mode CLI)")
     p.add_argument('--version', action='version',
                    version=f"VulnScan {__version__} (Python {platform.python_version()})")
     p.add_argument('--check', action='store_true',
@@ -729,6 +729,13 @@ def main():
         return
 
     if not args.url:
+        # Pas d'URL fournie : on lance le mode interactif (qui demandera l'URL/IP)
+        if args.full or args.json or args.html or args.scan_protected:
+            print(f"{C.RED}[!] Erreur : une URL ou IP est obligatoire en mode CLI.{C.END}")
+            print(f"{C.YELLOW}Usage : vulnscan <URL_ou_IP> [options]{C.END}")
+            print(f"{C.DIM}Exemple : vulnscan https://exemple.com --full{C.END}")
+            print(f"{C.DIM}Ou lancez le mode interactif : vulnscan{C.END}")
+            sys.exit(1)
         try: mode_interactif()
         except KeyboardInterrupt: pass
         return
