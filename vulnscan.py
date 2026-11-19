@@ -102,6 +102,18 @@ class VulnScanner:
         self.session.headers[name] = value
         self.log(f"Header {name} configure", 'ok')
 
+    def ping(self):
+        """Verifie que la cible repond avant de lancer le scan."""
+        print(f"\n{C.MAGENTA}[~] 0/18 Test de connectivite{C.END}")
+        r = self.req('GET', self.base_url)
+        if not r:
+            self.log(f"Cible injoignable : {self.base_url}", 'err')
+            self.log("Verifiez l'URL, le reseau, ou un eventuel pare-feu.", 'warn')
+            return False
+        elapsed = r.elapsed.total_seconds() if hasattr(r, 'elapsed') else 0
+        print(f"   HTTP {r.status_code} - {len(r.content)} octets - {elapsed:.2f}s")
+        return True
+
     def check_headers(self):
         print(f"\n{C.MAGENTA}[~] 1/18 En-tetes de securite{C.END}")
         r = self.req('GET', self.base_url)
@@ -597,6 +609,8 @@ def setup_auth(sc):
 
 
 def run_full(sc):
+    if not sc.ping():
+        return
     sc.check_headers(); sc.check_files(); sc.check_cookies()
     sc.check_methods(); sc.check_dir_listing()
     sc.check_forms(); sc.check_form_vulns()
@@ -620,6 +634,9 @@ def mode_interactif():
     url = ask_url()
     sc = VulnScanner(url, delay=ask_delay())
     setup_auth(sc)
+    if not sc.ping():
+        print(f"{C.YELLOW}[!] Scan annule : cible injoignable.{C.END}")
+        return
     print(MENU)
     ch = input(f"{C.BOLD}Choix > {C.END}").strip().lower()
     if ch == 'q': return
@@ -701,6 +718,8 @@ def main():
     sc = VulnScanner(args.url, delay=args.delay)
     if args.user and args.password: sc.set_basic_auth(args.user, args.password)
     if args.cookie: sc.set_cookie(args.cookie)
+    if not sc.ping():
+        sys.exit(1)
     if args.scan_protected:
         sc.scan_protected([p.strip() for p in args.scan_protected.split(',')])
     elif args.full: run_full(sc)
