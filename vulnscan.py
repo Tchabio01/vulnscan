@@ -114,6 +114,130 @@ class VulnScanner:
         print(f"   HTTP {r.status_code} - {len(r.content)} octets - {elapsed:.2f}s")
         return True
 
+    def check_ssl(self):
+        """Verifie le certificat SSL/TLS et les protocoles supportes."""
+        print(f"\n{C.MAGENTA}[~] 19/19 SSL/TLS{C.END}")
+        import ssl
+        import socket
+        from urllib.parse import urlparse
+        
+        parsed = urlparse(self.base_url)
+        host = parsed.hostname
+        port = parsed.port or (443 if parsed.scheme == 'https' else 80)
+        
+        if parsed.scheme != 'https':
+            print(f"   {C.DIM}Site en HTTP, pas de SSL a verifier{C.END}")
+            return
+        
+        # 1. Verifier le certificat
+        try:
+            context = ssl.create_default_context()
+            with socket.create_connection((host, port), timeout=self.timeout) as sock:
+                with context.wrap_socket(sock, server_hostname=host) as ssock:
+                    cert = ssock.getpeercert()
+                    cipher = ssock.cipher()
+                    version = ssock.version()
+                    
+                    # Date d'expiration
+                    import datetime
+                    expire = datetime.datetime.strptime(cert['notAfter'], '%b %d %H:%M:%S %Y %Z')
+                    days_left = (expire - datetime.datetime.now()).days
+                    print(f"   Certificat valide {days_left} jours (expire: {cert['notAfter']})")
+                    print(f"   Protocole: {version}, Cipher: {cipher[0]}")
+                    
+                    if days_left < 0:
+                        self.add(Finding("Certificat SSL expire", 'CRITICAL', self.base_url,
+                            f"Expire depuis {abs(days_left)} jours",
+                            "Le certificat SSL est expire.",
+                            "Renouvelez le certificat.",
+                            proof=f"notAfter: {cert['notAfter']}"))
+                    elif days_left < 30:
+                        self.add(Finding("Certificat SSL bientot expire", 'MEDIUM', self.base_url,
+                            f"Expire dans {days_left} jours",
+                            "Le certificat SSL expire bientot.",
+                            "Renouvelez le certificat.",
+                            proof=f"notAfter: {cert['notAfter']}"))
+                    
+                    # Protocoles obsoletes
+                    if version in ('TLSv1', 'TLSv1.1', 'SSLv3'):
+                        self.add(Finding(f"Protocole obsolete: {version}", 'HIGH', self.base_url,
+                            f"Le serveur supporte {version}",
+                            "Protocole SSL/TLS obsolete et vulnerable.",
+                            "Desactivez TLS 1.0/1.1, utilisez TLS 1.2+.",
+                            proof=f"Version: {version}"))
+        except ssl.SSLError as e:
+            self.add(Finding("Erreur SSL/TLS", 'HIGH', self.base_url,
+                f"Erreur: {e}", "Le certificat SSL est invalide.",
+                "Verifiez le certificat SSL.", proof=str(e)[:120]))
+        except Exception as e:
+            if self.verbose:
+                self.log(f"SSL check: {e.__class__.__name__}", 'err')
+
+    def check_technologies(self):
+        """Detecte les technologies utilisees (CMS, frameworks, serveurs)."""
+        print(f"\n{C.MAGENTA}[~] 20/20 Technologies{C.END}")
+        r = self.req('GET', self.base_url)
+        if not r:
+            return
+        
+        techs = []
+        headers = {k.lower(): v for k, v in r.headers.items()}
+        body = r.text.lower()
+        
+        # Serveur
+        if 'server' in headers:
+            techs.append(f"Serveur: {headers['server']}")
+        
+        # Frameworks backend
+        if 'x-powered-by' in headers:
+            techs.append(f"Backend: {headers['x-powered-by']}")
+        
+        # CMS
+        cms_sigs = {
+            'WordPress': ['wp-content', 'wp-includes', 'wordpress'],
+            'Joomla': ['joomla', '/components/com_'],
+            'Drupal': ['drupal', 'sites/default/files'],
+            'Magento': ['magento', 'mage/'],
+            'PrestaShop': ['prestashop'],
+        }
+        for cms, sigs in cms_sigs.items():
+            if any(sig in body for sig in sigs):
+                techs.append(f"CMS: {cms}")
+        
+        # Frameworks frontend
+        js_sigs = {
+            'React': ['react', '_react'],
+            'Vue.js': ['vue.js', 'vue.min.js', 'v-'],
+            'Angular': ['angular', 'ng-'],
+            'jQuery': ['jquery'],
+            'Bootstrap': ['bootstrap'],
+        }
+        for js, sigs in js_sigs.items():
+            if any(sig in body for sig in sigs):
+                techs.append(f"Frontend: {js}")
+        
+        # Langages
+        if 'set-cookie' in headers:
+            cookie = headers['set-cookie'].lower()
+            if 'phpsessid' in cookie:
+                techs.append("Langage: PHP")
+            elif 'jsessionid' in cookie:
+                techs.append("Langage: Java")
+            elif 'asp.net' in cookie:
+                techs.append("Langage: ASP.NET")
+        
+        if techs:
+            print(f"   {C.DIM}Technologies detectees:{C.END}")
+            for t in techs:
+                print(f"   {C.CYAN}  - {t}{C.END}")
+            self.add(Finding("Technologies detectees", 'INFO', self.base_url,
+                f"{len(techs)} technologies",
+                "La stack technique est visible.",
+                "Masquez les signatures technologiques.",
+                proof="; ".join(techs[:5])))
+        else:
+            print(f"   {C.DIM}Aucune technologie specifique detectee{C.END}")
+
     def check_headers(self):
         print(f"\n{C.MAGENTA}[~] 1/18 En-tetes de securite{C.END}")
         r = self.req('GET', self.base_url)
@@ -633,6 +757,8 @@ def run_full(sc):
     sc.check_methods(); sc.check_dir_listing()
     sc.check_forms(); sc.check_form_vulns()
     sc.check_html_comments(); sc.check_cors(); sc.check_info_disclosure()
+    sc.check_ssl()
+    sc.check_technologies()
     pages = sc.deep_crawl(depth=2, max_pages=20)
     for link in pages:
         pu = urlparse(link)
