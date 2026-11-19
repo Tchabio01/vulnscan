@@ -5,3 +5,4 @@ rapport_*.json
 *.log
 .env
 venv/
+analyse-image/
