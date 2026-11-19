@@ -6,3 +6,26 @@ rapport_*.json
 .env
 venv/
 analyse-image/
+
+# Python build artifacts
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Sauvegardes locales
+*.bak
+*.orig
+
+# Résultats de scan (données personnelles)
+DirBusterReport-*
+rapport_*.json
+rapport_*.html
+analyse-image/
+
+# OS
+.DS_Store
+Thumbs.db
