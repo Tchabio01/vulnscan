@@ -1030,8 +1030,6 @@ def run_full(sc):
     sc.check_mixed_content()
     sc.check_sri()
     sc.check_dns_security()
-    sc.check_ssl()
-    sc.check_technologies()
     pages = sc.deep_crawl(depth=2, max_pages=20)
     for link in pages:
         pu = urlparse(link)
