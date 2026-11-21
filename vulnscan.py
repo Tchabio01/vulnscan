@@ -238,6 +238,267 @@ class VulnScanner:
         else:
             print(f"   {C.DIM}Aucune technologie specifique detectee{C.END}")
 
+    def check_waf(self):
+        """Detecte la presence d'un WAF (Cloudflare, Akamai, etc.)."""
+        print(f"\n{C.MAGENTA}[~] 22/30 Detection WAF{C.END}")
+        r = self.req('GET', self.base_url)
+        if not r: return
+        headers = {k.lower(): v.lower() for k, v in r.headers.items()}
+        body = r.text.lower()
+        wafs = []
+        # Signatures WAF
+        signatures = {
+            'Cloudflare': ['cf-ray', 'cloudflare', '__cfduid'],
+            'Akamai': ['akamai', 'x-akamai'],
+            'AWS WAF': ['x-amzn-requestid', 'awselb'],
+            'Sucuri': ['x-sucuri-id', 'sucuri'],
+            'Incapsula': ['x-iinfo', 'incap_ses'],
+            'F5 BIG-IP': ['bigipserver', 'f5-'],
+            'ModSecurity': ['mod_security', 'modsecurity'],
+            'Barracuda': ['barra_counter_session'],
+            'Fastly': ['x-fastly', 'fastly'],
+            'Imperva': ['imperva', 'visid_incap'],
+        }
+        for waf, sigs in signatures.items():
+            if any(sig in headers or sig in body for sig in sigs):
+                wafs.append(waf)
+        if wafs:
+            print(f"   {C.YELLOW}WAF detecte: {', '.join(wafs)}{C.END}")
+            self.add(Finding("WAF detecte", 'INFO', self.base_url,
+                f"WAF: {', '.join(wafs)}", "Un WAF protege le site.",
+                "Verifiez la configuration du WAF.", proof=f"WAF: {', '.join(wafs)}"))
+        else:
+            print(f"   {C.DIM}Aucun WAF detecte{C.END}")
+
+    def check_ports(self):
+        """Scan TCP basique des ports web courants."""
+        print(f"\n{C.MAGENTA}[~] 23/30 Scan de ports{C.END}")
+        import socket
+        from urllib.parse import urlparse
+        parsed = urlparse(self.base_url)
+        host = parsed.hostname
+        if not host: return
+        ports = [80, 443, 8080, 8443, 8000, 3000, 5000, 9000, 22, 21]
+        open_ports = []
+        for port in ports:
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(1)
+                result = sock.connect_ex((host, port))
+                sock.close()
+                if result == 0:
+                    open_ports.append(port)
+                    print(f"   {C.GREEN}[+] Port {port} ouvert{C.END}")
+            except Exception:
+                pass
+        if open_ports:
+            self.add(Finding("Ports ouverts", 'INFO', self.base_url,
+                f"Ports: {', '.join(map(str, open_ports))}",
+                "Des ports sont ouverts sur le serveur.",
+                "Fermez les ports non necessaires.",
+                proof=f"Ports: {', '.join(map(str, open_ports))}"))
+
+    def check_api_endpoints(self):
+        """Cherche des endpoints API courants."""
+        print(f"\n{C.MAGENTA}[~] 24/30 Endpoints API{C.END}")
+        endpoints = [
+            '/api/', '/api/v1/', '/api/v2/', '/api/docs', '/api/swagger',
+            '/swagger.json', '/swagger-ui.html', '/openapi.json', '/api-docs',
+            '/graphql', '/graphiql', '/rest', '/api/health', '/health',
+            '/api/status', '/actuator', '/actuator/health', '/metrics',
+        ]
+        found = 0
+        for ep in endpoints:
+            url = f"{self.base_url}{ep}"
+            r = self.req('GET', url)
+            if not r or r.status_code not in (200, 201, 401, 403): continue
+            ct = r.headers.get('Content-Type', '').lower()
+            if 'text/html' in ct and 'not found' in r.text.lower()[:500]: continue
+            sev = 'MEDIUM' if any(x in ep for x in ['swagger', 'graphql', 'openapi', 'api-docs']) else 'LOW'
+            self.add(Finding(f"Endpoint API: {ep}", sev, url,
+                f"HTTP {r.status_code} - {len(r.content)} bytes - {ct}",
+                f"L'endpoint '{ep}' est accessible.",
+                "Restreignez l'acces ou desactivez la doc API en prod.",
+                proof=r.text[:100].replace('\n', ' ')))
+            found += 1
+        if found == 0:
+            print(f"   {C.DIM}Aucun endpoint API expose{C.END}")
+
+    def check_admin_panels(self):
+        """Cherche des panneaux d'administration courants."""
+        print(f"\n{C.MAGENTA}[~] 25/30 Panneaux admin{C.END}")
+        panels = [
+            '/admin', '/admin/', '/administrator', '/wp-admin', '/phpmyadmin',
+            '/adminer.php', '/admin/login', '/login', '/wp-login.php',
+            '/cpanel', '/webmail', '/plesk', '/directadmin',
+            '/manager/html', '/admin.php', '/adminpanel', '/admin_area',
+        ]
+        found = 0
+        for p in panels:
+            url = f"{self.base_url}{p}"
+            r = self.req('GET', url)
+            if not r: continue
+            if r.status_code in (200, 401, 403) and len(r.content) > 200:
+                sev = 'HIGH' if any(x in p for x in ['phpmyadmin', 'adminer', 'manager/html']) else 'MEDIUM'
+                self.add(Finding(f"Panneau admin: {p}", sev, url,
+                    f"HTTP {r.status_code} - {len(r.content)} bytes",
+                    f"Panneau d'administration accessible: {p}",
+                    "Restreignez par IP ou desactivez en prod.",
+                    proof=f"HTTP {r.status_code}"))
+                found += 1
+        if found == 0:
+            print(f"   {C.DIM}Aucun panneau admin accessible{C.END}")
+
+    def check_cms_paths(self):
+        """Detecte le CMS et teste ses chemins specifiques."""
+        print(f"\n{C.MAGENTA}[~] 26/30 CMS-specific{C.END}")
+        r = self.req('GET', self.base_url)
+        if not r: return
+        body = r.text.lower()
+        cms = None
+        if 'wp-content' in body or 'wp-includes' in body:
+            cms = 'WordPress'
+        elif 'joomla' in body:
+            cms = 'Joomla'
+        elif 'drupal' in body:
+            cms = 'Drupal'
+        elif 'magento' in body:
+            cms = 'Magento'
+        elif 'prestashop' in body:
+            cms = 'PrestaShop'
+        if not cms:
+            print(f"   {C.DIM}Aucun CMS detecte{C.END}")
+            return
+        print(f"   {C.YELLOW}CMS detecte: {cms}{C.END}")
+        cms_paths = {
+            'WordPress': ['/wp-config.php.bak', '/wp-config.php~', '/xmlrpc.php',
+                         '/wp-json/wp/v2/users', '/?author=1', '/wp-content/debug.log'],
+            'Joomla': ['/configuration.php.bak', '/administrator/', '/htaccess.txt'],
+            'Drupal': ['/CHANGELOG.txt', '/INSTALL.txt', '/sites/default/settings.php.bak'],
+            'Magento': ['/app/etc/local.xml', '/downloader/', '/admin'],
+            'PrestaShop': ['/config/settings.inc.php', '/admin', '/install/'],
+        }
+        for path in cms_paths.get(cms, []):
+            url = f"{self.base_url}{path}"
+            r = self.req('GET', url)
+            if r and r.status_code == 200 and len(r.content) > 50:
+                self.add(Finding(f"{cms} - chemin sensible: {path}", 'HIGH', url,
+                    f"HTTP 200 - {len(r.content)} bytes",
+                    f"Chemin specifique {cms} accessible.",
+                    f"Protegez ou supprimez {path}.",
+                    proof=r.text[:100].replace('\n', ' ')))
+
+    def check_wellknown(self):
+        """Verifie les fichiers .well-known (security.txt, etc.)."""
+        print(f"\n{C.MAGENTA}[~] 27/30 .well-known{C.END}")
+        files = [
+            '/.well-known/security.txt',
+            '/security.txt',
+            '/.well-known/change-password',
+            '/.well-known/dnssec-trigger',
+            '/humans.txt',
+        ]
+        for f in files:
+            url = f"{self.base_url}{f}"
+            r = self.req('GET', url)
+            if r and r.status_code == 200 and len(r.content) > 10:
+                self.add(Finding(f"Fichier .well-known: {f}", 'LOW', url,
+                    f"HTTP 200 - {len(r.content)} bytes",
+                    f"Fichier '{f}' accessible.",
+                    "Verifiez le contenu (pas de fuite d'info).",
+                    proof=r.text[:120].replace('\n', ' ')))
+
+    def check_mixed_content(self):
+        """Detecte du contenu HTTP charge sur une page HTTPS."""
+        print(f"\n{C.MAGENTA}[~] 28/30 Mixed content{C.END}")
+        from urllib.parse import urlparse
+        parsed = urlparse(self.base_url)
+        if parsed.scheme != 'https':
+            print(f"   {C.DIM}Site en HTTP, mixed content non applicable{C.END}")
+            return
+        r = self.req('GET', self.base_url)
+        if not r: return
+        import re
+        http_resources = re.findall(r'(?:src|href)=["\'](http://[^"\']+)["\']', r.text)
+        if http_resources:
+            self.add(Finding("Mixed content detecte", 'MEDIUM', self.base_url,
+                f"{len(http_resources)} ressources HTTP sur page HTTPS",
+                "Des ressources sont chargees en HTTP, cassant le chiffrement.",
+                "Utilisez HTTPS pour toutes les ressources.",
+                proof='\n'.join(http_resources[:3])))
+
+    def check_sri(self):
+        """Verifie la presence de Subresource Integrity sur les scripts externes."""
+        print(f"\n{C.MAGENTA}[~] 29/30 Subresource Integrity{C.END}")
+        r = self.req('GET', self.base_url)
+        if not r: return
+        import re
+        scripts = re.findall(r'<script[^>]*src=["\'](https?://[^"\']+)["\'][^>]*>', r.text)
+        external = [s for s in scripts if 'integrity=' not in s]
+        # Cherche specifiquement les scripts externes sans integrity
+        missing_sri = []
+        for m in re.finditer(r'<script[^>]*src=["\']([^"\']+)["\'][^>]*>', r.text):
+            tag = m.group(0)
+            src = m.group(1)
+            if src.startswith('http') and 'integrity=' not in tag:
+                missing_sri.append(src)
+        if missing_sri:
+            self.add(Finding("Scripts externes sans SRI", 'LOW', self.base_url,
+                f"{len(missing_sri)} scripts sans integrity",
+                "Les scripts externes n'ont pas de Subresource Integrity.",
+                "Ajoutez integrity='sha384-...' aux scripts externes.",
+                proof='\n'.join(missing_sri[:3])))
+
+    def check_dns_security(self):
+        """Verifie les enregistrements DNS de securite (SPF, DMARC, CAA)."""
+        print(f"\n{C.MAGENTA}[~] 30/30 DNS security{C.END}")
+        from urllib.parse import urlparse
+        import socket
+        parsed = urlparse(self.base_url)
+        host = parsed.hostname
+        if not host: return
+        try:
+            # CAA
+            try:
+                import subprocess
+                result = subprocess.run(['dig', '+short', 'CAA', host],
+                    capture_output=True, text=True, timeout=5)
+                if not result.stdout.strip():
+                    self.add(Finding("CAA manquant", 'LOW', self.base_url,
+                        f"Aucun enregistrement CAA pour {host}",
+                        "N'importe quelle CA peut emettre un certificat.",
+                        "Ajoutez un enregistrement CAA.",
+                        proof=f"dig CAA {host} -> vide"))
+                else:
+                    print(f"   CAA: {result.stdout.strip()[:80]}")
+            except FileNotFoundError:
+                print(f"   {C.DIM}dig non installe, CAA ignore{C.END}")
+            # SPF (via TXT)
+            try:
+                result = subprocess.run(['dig', '+short', 'TXT', host],
+                    capture_output=True, text=True, timeout=5)
+                txt = result.stdout.lower()
+                if 'v=spf1' not in txt:
+                    self.add(Finding("SPF manquant", 'LOW', self.base_url,
+                        f"Aucun SPF pour {host}",
+                        "Pas de protection contre le spoofing email.",
+                        "Ajoutez un enregistrement SPF.",
+                        proof=f"dig TXT {host} -> pas de v=spf1"))
+                # DMARC
+                result = subprocess.run(['dig', '+short', 'TXT', f'_dmarc.{host}'],
+                    capture_output=True, text=True, timeout=5)
+                if 'v=dmarc1' not in result.stdout.lower():
+                    self.add(Finding("DMARC manquant", 'LOW', self.base_url,
+                        f"Aucun DMARC pour {host}",
+                        "Pas de politique DMARC.",
+                        "Ajoutez un enregistrement _dmarc.",
+                        proof=f"dig TXT _dmarc.{host} -> vide"))
+            except FileNotFoundError:
+                pass
+        except Exception as e:
+            if self.verbose:
+                self.log(f"DNS check: {e}", 'err')
+
     def check_headers(self):
         print(f"\n{C.MAGENTA}[~] 1/18 En-tetes de securite{C.END}")
         r = self.req('GET', self.base_url)
@@ -829,7 +1090,80 @@ def mode_interactif():
         print(f"\n{C.GREEN}Aucun finding.{C.END}")
 
 
+
+def verify_fixes(sc, baseline_json):
+    """Re-scan et compare avec un rapport baseline pour confirmer les corrections.
+    Retourne 0 si tout est corrige, 1 sinon (utile pour CI)."""
+    import json
+    try:
+        with open(baseline_json) as f:
+            baseline = json.load(f)
+    except FileNotFoundError:
+        print(f"{C.RED}[!] Baseline introuvable : {baseline_json}{C.END}")
+        return 2
+    except json.JSONDecodeError:
+        print(f"{C.RED}[!] Baseline invalide (JSON) : {baseline_json}{C.END}")
+        return 2
+
+    baseline_findings = {(f['name'], f['url'], f['evidence']) for f in baseline['findings']}
+    print(f"{C.BOLD}Verification par rapport a : {baseline_json}{C.END}")
+    print(f"Findings baseline : {len(baseline_findings)}")
+
+    # Re-scan complet
+    if not sc.ping():
+        return 2
+    sc.check_headers()
+    sc.check_files()
+    sc.check_cookies()
+    sc.check_methods()
+    sc.check_dir_listing()
+    sc.check_forms()
+    sc.check_form_vulns()
+    sc.check_html_comments()
+    sc.check_cors()
+    sc.check_info_disclosure()
+    try:
+        sc.check_ssl()
+        sc.check_technologies()
+        sc.check_backups()
+    except AttributeError:
+        pass  # modules optionnels
+
+    current_findings = {(f.name, f.url, f.evidence) for f in sc.findings}
+
+    resolved = baseline_findings - current_findings
+    still_present = baseline_findings & current_findings
+    new_findings = current_findings - baseline_findings
+
+    print(f"\n{C.BOLD}{'='*62}")
+    print(f"   RESULTAT DE LA VERIFICATION")
+    print(f"{'='*62}{C.END}")
+    print(f"  {C.GREEN}Corrigees     : {len(resolved)}/{len(baseline_findings)}{C.END}")
+    print(f"  {C.RED}Toujours la   : {len(still_present)}{C.END}")
+    print(f"  {C.YELLOW}Nouvelles     : {len(new_findings)}{C.END}")
+
+    if resolved:
+        print(f"\n{C.GREEN}--- Corrigees ---{C.END}")
+        for name, url, ev in sorted(resolved):
+            print(f"  {C.GREEN}[OK]{C.END} {name}")
+
+    if still_present:
+        print(f"\n{C.RED}--- Toujours vulnerables ---{C.END}")
+        for name, url, ev in sorted(still_present):
+            print(f"  {C.RED}[KO]{C.END} {name}")
+            print(f"       {url}")
+
+    if new_findings:
+        print(f"\n{C.YELLOW}--- Nouvelles failles (regression ?) ---{C.END}")
+        for name, url, ev in sorted(new_findings):
+            print(f"  {C.YELLOW}[NEW]{C.END} {name}")
+
+    # Code de sortie : 0 = tout corrige, 1 = encore vulnerable
+    return 0 if not still_present else 1
+
+
 def main():
+
     p = argparse.ArgumentParser(
         prog="vulnscan",
         description="VulnScan - scanner pedagogique de vulnerabilites web",
@@ -844,6 +1178,8 @@ def main():
     p.add_argument('--json'); p.add_argument('--html')
     p.add_argument('--cookie'); p.add_argument('--user'); p.add_argument('--password')
     p.add_argument('--scan-protected')
+    p.add_argument('--verify', metavar='BASELINE_JSON',
+                   help="Verifie que les failles d'un rapport baseline sont corrigees")
     args = p.parse_args()
 
     if args.check:
@@ -871,6 +1207,9 @@ def main():
     if args.cookie: sc.set_cookie(args.cookie)
     if not sc.ping():
         sys.exit(1)
+    if args.verify:
+        code = verify_fixes(sc, args.verify)
+        sys.exit(code)
     if args.scan_protected:
         sc.scan_protected([p.strip() for p in args.scan_protected.split(',')])
     elif args.full: run_full(sc)
