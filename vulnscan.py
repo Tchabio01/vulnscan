@@ -1438,6 +1438,7 @@ def main():
     p.add_argument('--json'); p.add_argument('--html')
     p.add_argument('--cookie'); p.add_argument('--user'); p.add_argument('--password')
     p.add_argument('--scan-protected')
+    p.add_argument('--slack', help='Webhook Slack pour notification')
     p.add_argument('--verify', metavar='BASELINE_JSON',
                    help="Verifie que les failles d'un rapport baseline sont corrigees")
     args = p.parse_args()
@@ -1481,6 +1482,13 @@ def main():
     elif args.full: run_full(sc)
     else: sc.check_headers(); sc.check_files()
     sc.report(out_json=args.json, out_html=args.html)
+    if args.slack:
+        try:
+            from integrations.slack import notify
+            notify(args.slack, sc.base_url, sc.findings)
+            print(f"{C.GREEN}[+] Slack notifie{C.END}")
+        except Exception as e:
+            print(f"{C.RED}[!] Slack: {e}{C.END}")
 
 
 if __name__ == '__main__':
