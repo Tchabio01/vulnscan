@@ -30,3 +30,6 @@ analyse-image/
 .DS_Store
 Thumbs.db
 rapport*.txt
+dist/
+build/
+*.egg-info/
