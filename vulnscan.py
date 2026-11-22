@@ -823,27 +823,49 @@ class VulnScanner:
 
     def check_idor(self, url, params):
         print(f"{C.MAGENTA}[~] 12/30 IDOR sur {url}{C.END}")
-        nums = {k:v for k,v in (params or {}).items() if str(v).isdigit()}
-        for k,v in nums.items():
-            v = int(v)
-            base = self.req('GET', url, params={k:v})
+        if not params: return
+        # Ne tester que les params dont la valeur est un ID numerique
+        # ET dont le nom contient un indice d'identifiant
+        id_hints = ('id', 'user', 'account', 'profile', 'order', 'invoice', 'doc', 'file')
+        nums = {}
+        for k, v in params.items():
+            if not str(v).isdigit(): continue
+            if not any(h in k.lower() for h in id_hints): continue
+            nums[k] = int(v)
+        if not nums:
+            print(f"   {C.DIM}Aucun parametre ID numerique detecte{C.END}")
+            return
+        for k, v in nums.items():
+            base = self.req('GET', url, params={k: v})
             if not base: continue
             base_len = len(base.text)
-            for tv in [v-1, v+1, v+2, 1, 100]:
-                if tv < 0 or tv == v: continue
-                r = self.req('GET', url, params={k:tv})
+            base_status = base.status_code
+            for tv in [v+1, v+2]:
+                if tv <= 0: continue
+                r = self.req('GET', url, params={k: tv})
                 if not r or r.status_code != 200: continue
-                if abs(len(r.text) - base_len) < 50: continue
-                self.add(Finding(f"IDOR sur '{k}'", 'HIGH', url,
-                    f"{k}={v} ({base_len}b) vs {k}={tv} ({len(r.text)}b)",
-                    "Acces donnees d'autrui.",
-                    "Verif ownership cote serveur.",
-                    payload=f"{k}={tv}",
-                    proof=f"{base_len}b -> {len(r.text)}b")); return
+                # Exiger une difference significative (> 100 octets)
+                # ET un contenu qui change (pas juste un article different)
+                if abs(len(r.text) - base_len) > 100:
+                    self.add(Finding(f"IDOR potentiel sur '{k}'", 'HIGH', url,
+                        f"{k}={v} ({base_len}b) vs {k}={tv} ({len(r.text)}b)",
+                        "Acces potentiel a des donnees d'autrui.",
+                        "Verifiez ownership cote serveur.",
+                        payload=f"{k}={tv}",
+                        proof=f"{base_len}b -> {len(r.text)}b"))
+                    return
+        print(f"   {C.DIM}Aucun IDOR detecte{C.END}")
+
 
     def check_lfi(self, url, params):
         print(f"{C.MAGENTA}[~] 13/30 LFI sur {url}{C.END}")
         if not params: return
+        # Ignorer les fichiers statiques (faux positifs)
+        STATIC = ('.css', '.js', '.png', '.jpg', '.jpeg', '.gif', '.svg',
+                  '.ico', '.woff', '.woff2', '.ttf', '.eot', '.map')
+        if any(url.lower().endswith(ext) for ext in STATIC):
+            print(f"   {C.DIM}Fichier statique, LFI ignore{C.END}")
+            return
         for pl, sig in [("../../../../etc/passwd", r"root:.*:0:0:"),
                         ("....//....//....//etc/passwd", r"root:.*:0:0:"),
                         ("/etc/passwd", r"root:.*:0:0:"),
