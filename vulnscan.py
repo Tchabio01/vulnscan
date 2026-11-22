@@ -5,6 +5,8 @@ Compatible Linux, Windows, macOS, Termux.
 import argparse, sys, time, json, re, os, platform
 from urllib.parse import urlparse, parse_qs, urlunparse, urljoin
 from datetime import datetime
+from jinja2 import Template
+from collections import Counter
 
 if sys.version_info < (3, 8):
     sys.exit("[!] Python 3.8+ requis. Vous avez " + platform.python_version())
@@ -986,27 +988,90 @@ class VulnScanner:
             print(f"{C.GREEN}[+] HTML : {out_html}{C.END}")
 
     def _html(self, path):
-        sev_col = {'CRITICAL':'#7b1fa2','HIGH':'#c62828','MEDIUM':'#f9a825','LOW':'#0288d1','INFO':'#455a64'}
-        rows = []
-        for f in sorted(self.findings, key=lambda x: Finding.SEV_ORDER[x.severity]):
-            rows.append(
-              f"<tr><td style='background:{sev_col[f.severity]};color:#fff;font-weight:bold'>{f.severity}</td>"
-              f"<td><b>{f.name}</b><br><small>{f.description}</small></td>"
-              f"<td><code>{f.url}</code></td>"
-              f"<td><code>{f.payload or ''}</code><br><small>{f.proof or ''}</small></td>"
-              f"<td><pre style='white-space:pre-wrap'>{f.remediation}</pre></td></tr>")
-        html = f"""<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
-<title>VulnScan - {self.base_url}</title><style>
-body{{font-family:sans-serif;max-width:1300px;margin:1em auto;padding:1em;background:#f5f5f5}}
-table{{width:100%;border-collapse:collapse;background:#fff}}
-th,td{{border:1px solid #eee;padding:8px;font-size:14px}}
-th{{background:#2c3e50;color:#fff}}code{{background:#f4f4f4;padding:2px 4px;font-size:12px}}
-</style></head><body><h1>Rapport VulnScan</h1>
-<p><b>Cible :</b> {self.base_url}<br><b>Date :</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}<br>
-<b>Total :</b> {len(self.findings)}</p>
-<table><thead><tr><th>Sev</th><th>Faille</th><th>URL</th><th>Preuve</th><th>Fix</th></tr></thead>
-<tbody>{''.join(rows)}</tbody></table></body></html>"""
-        with open(path,'w') as fp: fp.write(html)
+        sev_counts = Counter(f.severity for f in self.findings)
+        mod_counts = Counter(f.name.split()[0] for f in self.findings)
+        tpl = """<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
+<title>VulnScan - {{ target }}</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body{font-family:system-ui;max-width:1400px;margin:auto;padding:1em;background:#f5f5f5}
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:1em;margin:2em 0}
+canvas{background:#fff;border-radius:8px;padding:1em}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden}
+th,td{padding:.6em;border-bottom:1px solid #eee}
+th{background:#2c3e50;color:#fff}
+tr.critical{background:#f3e5f5} tr.high{background:#ffebee}
+tr.medium{background:#fff8e1} tr.low{background:#e3f2fd}
+.filters{margin:1em 0}
+.filters input,.filters select{padding:.4em;margin-right:.5em}
+</style></head><body>
+<h1>Rapport VulnScan</h1>
+<p><b>Cible :</b> {{ target }}<br><b>Date :</b> {{ date }}<br>
+<b>Total :</b> {{ total }} findings</p>
+<div class="charts">
+  <canvas id="sevChart"></canvas>
+  <canvas id="modChart"></canvas>
+</div>
+<div class="filters">
+  <input id="search" placeholder="Rechercher...">
+  <select id="sevFilter">
+    <option value="">Toutes severites</option>
+    {% for s in ['CRITICAL','HIGH','MEDIUM','LOW','INFO'] %}
+    <option>{{ s }}</option>{% endfor %}
+  </select>
+</div>
+<table id="tbl">
+<thead><tr><th>Sev</th><th>Nom</th><th>URL</th><th>Preuve</th><th>Fix</th></tr></thead>
+<tbody>
+{% for f in findings %}
+<tr class="{{ f.severity|lower }}" data-sev="{{ f.severity }}">
+  <td><b>{{ f.severity }}</b></td>
+  <td>{{ f.name }}</td>
+  <td><code>{{ f.url }}</code></td>
+  <td><code>{{ f.payload or '' }}</code><br><small>{{ (f.proof or '')[:200] }}</small></td>
+  <td><pre>{{ f.remediation }}</pre></td>
+</tr>
+{% endfor %}
+</tbody></table>
+<script>
+const sevData = {{ sev_counts|tojson }};
+new Chart(document.getElementById('sevChart'), {
+  type:'doughnut',
+  data:{labels:Object.keys(sevData),datasets:[{data:Object.values(sevData),
+    backgroundColor:['#7b1fa2','#c62828','#f9a825','#0288d1','#455a64']}]},
+  options:{plugins:{title:{display:true,text:'Par severite'}}}
+});
+const modData = {{ mod_counts|tojson }};
+new Chart(document.getElementById('modChart'), {
+  type:'bar',
+  data:{labels:Object.keys(modData),datasets:[{label:'Findings',data:Object.values(modData),
+    backgroundColor:'#2c3e50'}]},
+  options:{plugins:{title:{display:true,text:'Par module'}},indexAxis:'y'}
+});
+document.getElementById('search').oninput = filter;
+document.getElementById('sevFilter').onchange = filter;
+function filter(){
+  const q = document.getElementById('search').value.toLowerCase();
+  const s = document.getElementById('sevFilter').value;
+  document.querySelectorAll('#tbl tbody tr').forEach(tr=>{
+    const match = (!q || tr.innerText.toLowerCase().includes(q))
+                && (!s || tr.dataset.sev === s);
+    tr.style.display = match ? '' : 'none';
+  });
+}
+</script></body></html>"""
+        html = Template(tpl).render(
+            target=self.base_url,
+            date=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            total=len(self.findings),
+            findings=[f.to_dict() for f in self.findings],
+            sev_counts=dict(sev_counts),
+            mod_counts=dict(mod_counts),
+        )
+        with open(path, 'w') as f:
+            f.write(html)
+
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
 
 
 BANNER = f"""{C.BOLD}{C.CYAN}
@@ -1016,6 +1081,7 @@ BANNER = f"""{C.BOLD}{C.CYAN}
 ╚═══════════════════════════════════════════════════╝
 {C.END}{C.YELLOW}[!] Cibles autorisees uniquement{C.END}
 """
+
 
 MENU = f"""{C.BOLD}Que voulez-vous tester ?{C.END}
   {C.GREEN}1{C.END}. Audit complet + deep crawl
@@ -1028,20 +1094,18 @@ MENU = f"""{C.BOLD}Que voulez-vous tester ?{C.END}
   {C.GREEN}q{C.END}. Quitter
 """
 
+
 def validate_url(u):
     """Valide et normalise une URL. Retourne None si invalide."""
     if not u:
         return None
-    # Rejeter les doubles schemas
     if u.count('://') > 1:
         return None
-    # Rejeter les schemas non supportes
     if '://' in u and not u.startswith(('http://', 'https://')):
         return None
     parsed = urlparse(u)
     if not parsed.netloc:
         return None
-    # Rejeter les caracteres invalides dans le netloc
     if any(c in parsed.netloc for c in ' *<>"'):
         return None
     return u.rstrip('/')
@@ -1064,14 +1128,16 @@ def ask_url():
                 '172.24.', '172.25.', '172.26.', '172.27.', '172.28.',
                 '172.29.', '172.30.', '172.31.', '127.', 'localhost'
             ))
-            u = ('http://' if is_private else 'https://') + u
-        parsed = urlparse(u)
-        if not parsed.netloc:
+            http_only = ('scanme.nmap.org', 'ctf01.root-me.org', 'ctf03.root-me.org')
+            is_http_only = any(u.startswith(p) for p in http_only)
+            u = ('http://' if (is_private or is_http_only) else 'https://') + u
+        u = validate_url(u)
+        if not u:
             print(f"{C.RED}[!] URL invalide : {u}{C.END}")
             continue
-        u = u.rstrip('/')
         print(f"{C.GREEN}[+] Cible : {u}{C.END}")
         return u
+
 
 def ask_delay():
     while True:
@@ -1085,11 +1151,13 @@ def ask_delay():
         except ValueError:
             print(f"{C.YELLOW}[!] '{d}' n'est pas un nombre. Exemple : 0.5{C.END}")
 
+
 def ask_params_url():
     u = input(f"{C.BOLD}URL avec params > {C.END}").strip()
     if not u.startswith(('http','https')): u = 'https://'+u
     pu = urlparse(u)
     return urlunparse((pu.scheme,pu.netloc,pu.path,'','','')), {k:v[0] for k,v in parse_qs(pu.query).items()}
+
 
 def setup_auth(sc):
     print(f"\n{C.BOLD}Configuration d'acces{C.END}")
@@ -1149,6 +1217,8 @@ def run_full(sc):
 def mode_interactif():
     print(BANNER)
     url = ask_url()
+    if not url:
+        return
     sc = VulnScanner(url, delay=ask_delay())
     setup_auth(sc)
     if not sc.ping():
@@ -1200,78 +1270,6 @@ def mode_interactif():
         else: sc.report()
     else:
         print(f"\n{C.GREEN}Aucun finding.{C.END}")
-
-
-
-def verify_fixes(sc, baseline_json):
-    """Re-scan et compare avec un rapport baseline pour confirmer les corrections.
-    Retourne 0 si tout est corrige, 1 sinon (utile pour CI)."""
-    import json
-    try:
-        with open(baseline_json) as f:
-            baseline = json.load(f)
-    except FileNotFoundError:
-        print(f"{C.RED}[!] Baseline introuvable : {baseline_json}{C.END}")
-        return 2
-    except json.JSONDecodeError:
-        print(f"{C.RED}[!] Baseline invalide (JSON) : {baseline_json}{C.END}")
-        return 2
-
-    baseline_findings = {(f['name'], f['url'], f['evidence']) for f in baseline['findings']}
-    print(f"{C.BOLD}Verification par rapport a : {baseline_json}{C.END}")
-    print(f"Findings baseline : {len(baseline_findings)}")
-
-    # Re-scan complet
-    if not sc.ping():
-        return 2
-    sc.check_headers()
-    sc.check_files()
-    sc.check_cookies()
-    sc.check_methods()
-    sc.check_dir_listing()
-    sc.check_forms()
-    sc.check_form_vulns()
-    sc.check_html_comments()
-    sc.check_cors()
-    sc.check_info_disclosure()
-    try:
-        sc.check_ssl()
-        sc.check_technologies()
-        sc.check_backups()
-    except AttributeError:
-        pass  # modules optionnels
-
-    current_findings = {(f.name, f.url, f.evidence) for f in sc.findings}
-
-    resolved = baseline_findings - current_findings
-    still_present = baseline_findings & current_findings
-    new_findings = current_findings - baseline_findings
-
-    print(f"\n{C.BOLD}{'='*62}")
-    print(f"   RESULTAT DE LA VERIFICATION")
-    print(f"{'='*62}{C.END}")
-    print(f"  {C.GREEN}Corrigees     : {len(resolved)}/{len(baseline_findings)}{C.END}")
-    print(f"  {C.RED}Toujours la   : {len(still_present)}{C.END}")
-    print(f"  {C.YELLOW}Nouvelles     : {len(new_findings)}{C.END}")
-
-    if resolved:
-        print(f"\n{C.GREEN}--- Corrigees ---{C.END}")
-        for name, url, ev in sorted(resolved):
-            print(f"  {C.GREEN}[OK]{C.END} {name}")
-
-    if still_present:
-        print(f"\n{C.RED}--- Toujours vulnerables ---{C.END}")
-        for name, url, ev in sorted(still_present):
-            print(f"  {C.RED}[KO]{C.END} {name}")
-            print(f"       {url}")
-
-    if new_findings:
-        print(f"\n{C.YELLOW}--- Nouvelles failles (regression ?) ---{C.END}")
-        for name, url, ev in sorted(new_findings):
-            print(f"  {C.YELLOW}[NEW]{C.END} {name}")
-
-    # Code de sortie : 0 = tout corrige, 1 = encore vulnerable
-    return 0 if not still_present else 1
 
 
 def main():
