@@ -29,3 +29,4 @@ analyse-image/
 # OS
 .DS_Store
 Thumbs.db
+rapport*.txt
