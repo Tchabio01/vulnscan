@@ -1,5 +1,24 @@
 # Changelog
 
+## [3.4.0] - 2026-11-22
+
+### Ajoute
+- Rapport HTML interactif (Chart.js, filtres, recherche)
+- 8 nouveaux modules : sous-domaines, dirb, methodes HTTP, SSRF, deserialisation, subdomain takeover, rate limiting, fuites
+- TUI rich (tableau colore)
+- Integrations : Nuclei, Nmap, Slack
+- Base de connaissances (`--kb`) + tutoriels (`--tutorial`)
+- Plugin system (`--plugin`)
+- asyncio + cache HTTP
+- Tests pytest
+
+### Modifie
+- Version 3.3.1 -> 3.4.0
+- Dependances : jinja2, rich, dnspython, aiohttp
+
+## [3.3.1] - 2026-11-19
+...
+
 Toutes les modifications notables de VulnScan sont documentees ici.
 
 ## [3.3.1] - 2026-11-19
