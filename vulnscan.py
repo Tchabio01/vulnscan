@@ -1439,6 +1439,7 @@ def main():
     p.add_argument('--json'); p.add_argument('--html')
     p.add_argument('--cookie'); p.add_argument('--user'); p.add_argument('--password')
     p.add_argument('--scan-protected')
+    p.add_argument('--plugin', action='store_true', help='Charge les plugins du dossier plugins/')
     p.add_argument('--kb', help='Affiche une fiche KB (ex: hsts)')
     p.add_argument('--tutorial', help='Affiche un tutoriel (ex: 03-sqli)')
     p.add_argument('--slack', help='Webhook Slack pour notification')
@@ -1500,6 +1501,14 @@ def main():
         sc.scan_protected([p.strip() for p in args.scan_protected.split(',')])
     elif args.full: run_full(sc)
     else: sc.check_headers(); sc.check_files()
+    if args.plugin:
+        try:
+            from core.plugins import load_plugins
+            for mod in load_plugins():
+                print(f"{C.CYAN}[i] Plugin: {mod.__name__}{C.END}")
+                mod.scan(sc)
+        except Exception as e:
+            print(f"{C.RED}[!] Plugins: {e}{C.END}")
     sc.report(out_json=args.json, out_html=args.html)
     if args.slack:
         try:
