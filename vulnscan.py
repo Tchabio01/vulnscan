@@ -1439,6 +1439,7 @@ def main():
     p.add_argument('--json'); p.add_argument('--html')
     p.add_argument('--cookie'); p.add_argument('--user'); p.add_argument('--password')
     p.add_argument('--scan-protected')
+    p.add_argument('--stealth', action='store_true', help='Mode furtif (UA aleatoire, delai random)')
     p.add_argument('--plugin', action='store_true', help='Charge les plugins du dossier plugins/')
     p.add_argument('--kb', help='Affiche une fiche KB (ex: hsts)')
     p.add_argument('--tutorial', help='Affiche un tutoriel (ex: 03-sqli)')
@@ -1489,7 +1490,12 @@ def main():
         print(f"{C.RED}[!] URL invalide : {args.url}{C.END}")
         print(f"{C.DIM}Format attendu : https://exemple.com ou http://192.168.1.10{C.END}")
         sys.exit(1)
-    sc = VulnScanner(validated, delay=args.delay)
+    if args.stealth:
+        from core.stealth import apply as stealth_apply
+        sc = VulnScanner(validated, delay=args.delay)
+        stealth_apply(sc)
+    else:
+        sc = VulnScanner(validated, delay=args.delay)
     if args.user and args.password: sc.set_basic_auth(args.user, args.password)
     if args.cookie: sc.set_cookie(args.cookie)
     if not sc.ping():
