@@ -3,6 +3,7 @@
 Compatible Linux, Windows, macOS, Termux.
 """
 import argparse, sys, time, json, re, os, platform
+from pathlib import Path
 from urllib.parse import urlparse, parse_qs, urlunparse, urljoin
 from datetime import datetime
 from jinja2 import Template
@@ -1438,11 +1439,29 @@ def main():
     p.add_argument('--json'); p.add_argument('--html')
     p.add_argument('--cookie'); p.add_argument('--user'); p.add_argument('--password')
     p.add_argument('--scan-protected')
+    p.add_argument('--kb', help='Affiche une fiche KB (ex: hsts)')
+    p.add_argument('--tutorial', help='Affiche un tutoriel (ex: 03-sqli)')
     p.add_argument('--slack', help='Webhook Slack pour notification')
     p.add_argument('--verify', metavar='BASELINE_JSON',
                    help="Verifie que les failles d'un rapport baseline sont corrigees")
     args = p.parse_args()
 
+    if args.kb:
+        path = Path(__file__).parent / "docs" / "kb" / f"{args.kb}.md"
+        if path.exists():
+            print(path.read_text())
+        else:
+            print(f"[!] KB '{args.kb}' introuvable")
+            print("Disponibles :", [p.stem for p in (Path(__file__).parent / "docs" / "kb").glob("*.md")])
+        return
+    if args.tutorial:
+        path = Path(__file__).parent / "docs" / "tutorials" / f"{args.tutorial}.md"
+        if path.exists():
+            print(path.read_text())
+        else:
+            print(f"[!] Tutoriel '{args.tutorial}' introuvable")
+            print("Disponibles :", [p.stem for p in (Path(__file__).parent / "docs" / "tutorials").glob("*.md")])
+        return
     if args.check:
         print(f"[i] OS         : {OS_NAME} {platform.release()}")
         print(f"[i] Python     : {platform.python_version()}")
