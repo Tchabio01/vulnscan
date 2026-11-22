@@ -859,7 +859,9 @@ class VulnScanner:
 
     def check_lfi(self, url, params):
         print(f"{C.MAGENTA}[~] 13/30 LFI sur {url}{C.END}")
-        if not params: return
+        if not params:
+            print(f"   {C.DIM}Aucun parametre, LFI ignore{C.END}")
+            return
         # Ignorer les fichiers statiques (faux positifs)
         STATIC = ('.css', '.js', '.png', '.jpg', '.jpeg', '.gif', '.svg',
                   '.ico', '.woff', '.woff2', '.ttf', '.eot', '.map')
