@@ -554,6 +554,129 @@ class VulnScanner:
         if found == 0:
             print(f"   {C.DIM}Aucun backup expose{C.END}")
 
+    def check_subdomains(self):
+        """Decouverte de sous-domaines via DNS."""
+        print(f"\n{C.MAGENTA}[~] 31/38 Sous-domaines{C.END}")
+        import socket
+        from urllib.parse import urlparse
+        host = urlparse(self.base_url).hostname
+        if not host: return
+        domain = ".".join(host.split(".")[-2:])
+        WORDLIST = ["www","api","dev","staging","admin","mail","ftp","test","blog","shop","portal","vpn","remote","git"]
+        found = []
+        for sub in WORDLIST:
+            fqdn = f"{sub}.{domain}"
+            try:
+                ip = socket.gethostbyname(fqdn)
+                found.append((fqdn, ip))
+                print(f"   {C.GREEN}[+] {fqdn} -> {ip}{C.END}")
+            except socket.gaierror:
+                pass
+        if found:
+            self.add(Finding("Sous-domaines decouverts", 'INFO', self.base_url,
+                f"{len(found)} sous-domaines", "Sous-domaines exposes.",
+                "Verifiez leur securite.",
+                proof="; ".join(f"{s}->{ip}" for s, ip in found[:5])))
+
+    def check_dirb(self):
+        """Decouverte de repertoires courants."""
+        print(f"\n{C.MAGENTA}[~] 32/38 Repertoires{C.END}")
+        PATHS = ["/admin","/backup","/config","/api","/.git","/.env","/test","/dev","/private","/uploads"]
+        for p in PATHS:
+            r = self.req('GET', self.base_url + p)
+            if r and r.status_code in (200, 301, 403) and len(r.content) > 100:
+                self.add(Finding(f"Repertoire expose: {p}", 'MEDIUM', self.base_url + p,
+                    f"HTTP {r.status_code}", "Repertoire accessible.",
+                    "Restreignez l'acces.", proof=f"HTTP {r.status_code}"))
+
+    def check_http_methods(self):
+        """Teste les methodes HTTP dangereuses."""
+        print(f"\n{C.MAGENTA}[~] 33/38 Methodes HTTP dangereuses{C.END}")
+        for m in ["PUT","DELETE","TRACE","PATCH"]:
+            r = self.req(m, self.base_url)
+            if r and r.status_code not in (405, 501):
+                self.add(Finding(f"Methode HTTP dangereuse: {m}", 'HIGH', self.base_url,
+                    f"HTTP {r.status_code}", f"Methode {m} acceptee.",
+                    f"Desactivez {m}.", proof=f"HTTP {r.status_code}"))
+
+    def check_ssrf(self, url, params):
+        """Teste les SSRF sur les parametres."""
+        print(f"{C.MAGENTA}[~] 34/38 SSRF sur {url}{C.END}")
+        if not params: return
+        PAYLOADS = ["http://169.254.169.254/latest/meta-data/","http://localhost:22/","file:///etc/passwd"]
+        for pl in PAYLOADS:
+            r = self.req('GET', url, params={k: pl for k in params})
+            if r and any(x in r.text.lower() for x in ["ami-","root:","ssh-"]):
+                self.add(Finding("SSRF potentielle", 'CRITICAL', url,
+                    f"Payload {pl!r}", "Le serveur fait des requetes internes.",
+                    "Whitelist des URLs autorisees.", payload=pl))
+                return
+
+    def check_deserialization(self):
+        """Detecte les cookies serialises."""
+        print(f"\n{C.MAGENTA}[~] 35/38 Deserialisation{C.END}")
+        r = self.req('GET', self.base_url)
+        if not r: return
+        import re
+        SIGS = {"Java": re.compile(r"^rO0AB"), "PHP": re.compile(r"^Tzox"), "Python": re.compile(r"^gASV")}
+        for c in r.cookies:
+            val = c.value or ""
+            for lang, sig in SIGS.items():
+                if sig.match(val):
+                    self.add(Finding(f"Deserialisation {lang}", 'CRITICAL', self.base_url,
+                        f"Cookie '{c.name}' serialise", "Donnees serialisees non securisees.",
+                        "Utilisez JSON + signature.", proof=val[:60]))
+
+    def check_takeover(self):
+        """Detecte les subdomain takeover."""
+        print(f"\n{C.MAGENTA}[~] 36/38 Subdomain takeover{C.END}")
+        try:
+            import dns.resolver
+        except ImportError:
+            print(f"   {C.DIM}dnspython non installe{C.END}")
+            return
+        import socket
+        from urllib.parse import urlparse
+        host = urlparse(self.base_url).hostname
+        if not host: return
+        VULN = ["herokuapp.com","s3.amazonaws.com","github.io","azurewebsites.net"]
+        try:
+            ans = dns.resolver.resolve(host, 'CNAME')
+            for r in ans:
+                target = str(r.target)
+                if any(v in target for v in VULN):
+                    try:
+                        socket.gethostbyname(target)
+                    except socket.gaierror:
+                        self.add(Finding("Subdomain takeover potentiel", 'HIGH', self.base_url,
+                            f"CNAME -> {target} (non resolu)", "CNAME orphelin.",
+                            "Supprimez le CNAME ou reclamez le service.", proof=target))
+        except Exception:
+            pass
+
+    def check_ratelimit(self):
+        """Verifie l'absence de rate limiting."""
+        print(f"\n{C.MAGENTA}[~] 37/38 Rate limiting{C.END}")
+        codes = []
+        for _ in range(30):
+            r = self.req('GET', self.base_url)
+            if r: codes.append(r.status_code)
+        if 429 not in codes:
+            self.add(Finding("Rate limiting absent", 'LOW', self.base_url,
+                "30 req, aucun 429", "Pas de protection contre le brute-force.",
+                "Ajoutez un rate limiting."))
+
+    def check_leaks(self):
+        """Detecte les fuites d'information."""
+        print(f"\n{C.MAGENTA}[~] 38/38 Fuites d'information{C.END}")
+        FILES = ["/.git/config","/.svn/entries","/.hg/requires","/.DS_Store","/Thumbs.db","/phpinfo.php","/info.php","/swagger.json","/openapi.json"]
+        for f in FILES:
+            r = self.req('GET', self.base_url + f)
+            if r and r.status_code == 200 and len(r.content) > 50:
+                self.add(Finding(f"Fuite: {f}", 'HIGH', self.base_url + f,
+                    f"HTTP 200 - {len(r.content)}b", "Fichier sensible expose.",
+                    "Supprimez ou protegez.", proof=r.text[:100]))
+
     def check_headers(self):
         print(f"\n{C.MAGENTA}[~] 1/30 En-tetes de securite{C.END}")
         r = self.req('GET', self.base_url)
@@ -1200,6 +1323,13 @@ def run_full(sc):
     sc.check_mixed_content()
     sc.check_sri()
     sc.check_dns_security()
+    sc.check_subdomains()
+    sc.check_dirb()
+    sc.check_http_methods()
+    sc.check_deserialization()
+    sc.check_takeover()
+    sc.check_ratelimit()
+    sc.check_leaks()
     pages = sc.deep_crawl(depth=2, max_pages=20)
     for link in pages:
         pu = urlparse(link)
