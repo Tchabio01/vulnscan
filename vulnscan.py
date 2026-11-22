@@ -6,6 +6,8 @@ import argparse, sys, time, json, re, os, platform
 from urllib.parse import urlparse, parse_qs, urlunparse, urljoin
 from datetime import datetime
 from jinja2 import Template
+from rich.console import Console
+from rich.table import Table
 from collections import Counter
 
 if sys.version_info < (3, 8):
@@ -1079,7 +1081,25 @@ class VulnScanner:
                             proof=cm.strip()[:200]))
                         break
 
+    def show_findings_rich(self):
+        """Affiche les findings avec rich (tableau colore)."""
+        console = Console()
+        table = Table(title=f"Findings - {self.base_url}")
+        table.add_column("Sev", style="bold")
+        table.add_column("Nom")
+        table.add_column("URL", style="dim")
+        for f in self.findings:
+            color = {"CRITICAL":"magenta","HIGH":"red","MEDIUM":"yellow",
+                     "LOW":"cyan","INFO":"blue"}.get(f.severity, "white")
+            table.add_row(f"[{color}]{f.severity}[/{color}]", f.name, f.url)
+        console.print(table)
+
     def report(self, out_json=None, out_html=None):
+        # Affichage rich si disponible
+        try:
+            self.show_findings_rich()
+        except Exception:
+            pass
         print(f"\n{C.BOLD}{'='*62}")
         print(f"   RAPPORT - {self.base_url}")
         print(f"{'='*62}{C.END}")
