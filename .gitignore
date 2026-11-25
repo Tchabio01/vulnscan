@@ -33,3 +33,4 @@ rapport*.txt
 dist/
 build/
 *.egg-info/
+rapport*.txt
