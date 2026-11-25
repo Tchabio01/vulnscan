@@ -12,8 +12,6 @@ analyse-image/
 build/
 dist/
 .venv/
-venv/
-__pycache__/
 *.py[cod]
 
 # Sauvegardes locales
@@ -22,17 +20,9 @@ __pycache__/
 
 # Résultats de scan (données personnelles)
 DirBusterReport-*
-rapport_*.json
-rapport_*.html
-analyse-image/
 
 # OS
 .DS_Store
 Thumbs.db
 rapport*.txt
-dist/
-build/
-*.egg-info/
-rapport*.txt
-vulnscan/
 vulnscan/
