@@ -109,7 +109,7 @@ class VulnScanner:
 
     def ping(self):
         """Verifie que la cible repond avant de lancer le scan."""
-        print(f"\n{C.MAGENTA}[~] 0/30 Test de connectivite{C.END}")
+        print(f"\n{C.MAGENTA}[~] 0/38 Test de connectivite{C.END}")
         r = self.req('GET', self.base_url)
         if not r:
             self.log(f"Cible injoignable : {self.base_url}", 'err')
@@ -121,7 +121,7 @@ class VulnScanner:
 
     def check_ssl(self):
         """Verifie le certificat SSL/TLS et les protocoles supportes."""
-        print(f"\n{C.MAGENTA}[~] 19/30 SSL/TLS{C.END}")
+        print(f"\n{C.MAGENTA}[~] 19/38 SSL/TLS{C.END}")
         import ssl
         import socket
         from urllib.parse import urlparse
@@ -180,7 +180,7 @@ class VulnScanner:
 
     def check_technologies(self):
         """Detecte les technologies utilisees (CMS, frameworks, serveurs)."""
-        print(f"\n{C.MAGENTA}[~] 20/30 Technologies{C.END}")
+        print(f"\n{C.MAGENTA}[~] 20/38 Technologies{C.END}")
         r = self.req('GET', self.base_url)
         if not r:
             return
@@ -245,7 +245,7 @@ class VulnScanner:
 
     def check_waf(self):
         """Detecte la presence d'un WAF (Cloudflare, Akamai, etc.)."""
-        print(f"\n{C.MAGENTA}[~] 22/30 Detection WAF{C.END}")
+        print(f"\n{C.MAGENTA}[~] 22/38 Detection WAF{C.END}")
         r = self.req('GET', self.base_url)
         if not r: return
         headers = {k.lower(): v.lower() for k, v in r.headers.items()}
@@ -277,7 +277,7 @@ class VulnScanner:
 
     def check_ports(self):
         """Scan TCP + verification HTTP pour eviter les faux positifs."""
-        print(f"\n{C.MAGENTA}[~] 23/30 Scan de ports{C.END}")
+        print(f"\n{C.MAGENTA}[~] 23/38 Scan de ports{C.END}")
         import socket
         from urllib.parse import urlparse
         host = urlparse(self.base_url).hostname
@@ -327,7 +327,7 @@ class VulnScanner:
 
     def check_api_endpoints(self):
         """Cherche des endpoints API courants."""
-        print(f"\n{C.MAGENTA}[~] 24/30 Endpoints API{C.END}")
+        print(f"\n{C.MAGENTA}[~] 24/38 Endpoints API{C.END}")
         endpoints = [
             '/api/', '/api/v1/', '/api/v2/', '/api/docs', '/api/swagger',
             '/swagger.json', '/swagger-ui.html', '/openapi.json', '/api-docs',
@@ -353,7 +353,7 @@ class VulnScanner:
 
     def check_admin_panels(self):
         """Cherche des panneaux d'administration courants."""
-        print(f"\n{C.MAGENTA}[~] 25/30 Panneaux admin{C.END}")
+        print(f"\n{C.MAGENTA}[~] 25/38 Panneaux admin{C.END}")
         panels = [
             '/admin', '/admin/', '/administrator', '/wp-admin', '/phpmyadmin',
             '/adminer.php', '/admin/login', '/login', '/wp-login.php',
@@ -378,7 +378,7 @@ class VulnScanner:
 
     def check_cms_paths(self):
         """Detecte le CMS et teste ses chemins specifiques."""
-        print(f"\n{C.MAGENTA}[~] 26/30 CMS-specific{C.END}")
+        print(f"\n{C.MAGENTA}[~] 26/38 CMS-specific{C.END}")
         r = self.req('GET', self.base_url)
         if not r: return
         body = r.text.lower()
@@ -417,7 +417,7 @@ class VulnScanner:
 
     def check_wellknown(self):
         """Verifie les fichiers .well-known (security.txt, etc.)."""
-        print(f"\n{C.MAGENTA}[~] 27/30 .well-known{C.END}")
+        print(f"\n{C.MAGENTA}[~] 27/38 .well-known{C.END}")
         files = [
             '/.well-known/security.txt',
             '/security.txt',
@@ -437,7 +437,7 @@ class VulnScanner:
 
     def check_mixed_content(self):
         """Detecte du contenu HTTP charge sur une page HTTPS."""
-        print(f"\n{C.MAGENTA}[~] 28/30 Mixed content{C.END}")
+        print(f"\n{C.MAGENTA}[~] 28/38 Mixed content{C.END}")
         from urllib.parse import urlparse
         parsed = urlparse(self.base_url)
         if parsed.scheme != 'https':
@@ -456,7 +456,7 @@ class VulnScanner:
 
     def check_sri(self):
         """Verifie la presence de Subresource Integrity sur les scripts externes."""
-        print(f"\n{C.MAGENTA}[~] 29/30 Subresource Integrity{C.END}")
+        print(f"\n{C.MAGENTA}[~] 29/38 Subresource Integrity{C.END}")
         r = self.req('GET', self.base_url)
         if not r: return
         import re
@@ -478,7 +478,7 @@ class VulnScanner:
 
     def check_dns_security(self):
         """Verifie les enregistrements DNS de securite (SPF, DMARC, CAA)."""
-        print(f"\n{C.MAGENTA}[~] 30/30 DNS security{C.END}")
+        print(f"\n{C.MAGENTA}[~] 30/38 DNS security{C.END}")
         from urllib.parse import urlparse
         import socket
         parsed = urlparse(self.base_url)
@@ -528,7 +528,7 @@ class VulnScanner:
 
     def check_backups(self):
         """Cherche des fichiers de backup exposes."""
-        print(f"\n{C.MAGENTA}[~] 21/30 Fichiers de backup{C.END}")
+        print(f"\n{C.MAGENTA}[~] 21/38 Fichiers de backup{C.END}")
         backup_files = [
             'index.php.bak', 'index.php~', 'index.php.old',
             'config.php.bak', 'config.php~', 'config.php.old',
@@ -593,14 +593,22 @@ class VulnScanner:
                     "Restreignez l'acces.", proof=f"HTTP {r.status_code}"))
 
     def check_http_methods(self):
-        """Teste les methodes HTTP dangereuses."""
+        """Teste les methodes HTTP via OPTIONS/Allow (plus fiable)."""
         print(f"\n{C.MAGENTA}[~] 33/38 Methodes HTTP dangereuses{C.END}")
-        for m in ["PUT","DELETE","TRACE","PATCH"]:
-            r = self.req(m, self.base_url)
-            if r and r.status_code not in (405, 501):
+        r = self.req('OPTIONS', self.base_url)
+        if not r:
+            return
+        allow = r.headers.get('Allow', '') or r.headers.get('allow', '')
+        if not allow:
+            print(f"   {C.DIM}Pas de header Allow, test ignore{C.END}")
+            return
+        print(f"   Allow: {allow}")
+        for m in ['PUT', 'DELETE', 'TRACE', 'PATCH']:
+            if m in allow.upper():
                 self.add(Finding(f"Methode HTTP dangereuse: {m}", 'HIGH', self.base_url,
-                    f"HTTP {r.status_code}", f"Methode {m} acceptee.",
-                    f"Desactivez {m}.", proof=f"HTTP {r.status_code}"))
+                    f"Allow: {allow}", f"Methode {m} listee dans Allow.",
+                    f"Desactivez {m}.", proof=f"Allow: {allow}"))
+
 
     def check_ssrf(self, url, params):
         """Teste les SSRF sur les parametres."""
@@ -681,7 +689,7 @@ class VulnScanner:
                     "Supprimez ou protegez.", proof=r.text[:100]))
 
     def check_headers(self):
-        print(f"\n{C.MAGENTA}[~] 1/30 En-tetes de securite{C.END}")
+        print(f"\n{C.MAGENTA}[~] 1/38 En-tetes de securite{C.END}")
         r = self.req('GET', self.base_url)
         if not r: return
         exp = {
@@ -704,7 +712,7 @@ class VulnScanner:
                     f"Masquez l'en-tete '{h}'.", proof=f"{h}: {h_low[h.lower()]}"))
 
     def check_files(self):
-        print(f"\n{C.MAGENTA}[~] 2/30 Fichiers sensibles{C.END}")
+        print(f"\n{C.MAGENTA}[~] 2/38 Fichiers sensibles{C.END}")
         files = ['robots.txt','sitemap.xml','.git/HEAD','.git/config','.env','.env.local',
                  'config.php','config.php.bak','wp-config.php','backup.zip','backup.sql',
                  'database.sql','.htaccess','.htpasswd','.DS_Store','phpinfo.php','info.php',
@@ -731,7 +739,7 @@ class VulnScanner:
         url = url or self.base_url
         if url in self.crawled_pages: return
         self.crawled_pages.add(url)
-        print(f"\n{C.MAGENTA}[~] 3/30 Commentaires HTML sur {url}{C.END}")
+        print(f"\n{C.MAGENTA}[~] 3/38 Commentaires HTML sur {url}{C.END}")
         r = self.req('GET', url)
         if not r: return
         if r.status_code >= 400 and len(r.content) < 500: return
@@ -766,7 +774,7 @@ class VulnScanner:
                     proof=f"<!-- {body[:150]} -->"))
 
     def check_cookies(self, url=None):
-        print(f"\n{C.MAGENTA}[~] 4/30 Cookies{C.END}")
+        print(f"\n{C.MAGENTA}[~] 4/38 Cookies{C.END}")
         url = url or self.base_url
         r = self.req('GET', url)
         if not r: return
@@ -785,7 +793,7 @@ class VulnScanner:
                     "Set-Cookie: name=val; Secure; HttpOnly; SameSite=Lax"))
 
     def check_methods(self):
-        print(f"\n{C.MAGENTA}[~] 5/30 Methodes HTTP{C.END}")
+        print(f"\n{C.MAGENTA}[~] 5/38 Methodes HTTP{C.END}")
         r = self.req('OPTIONS', self.base_url)
         if not r: return
         allow = r.headers.get('Allow','') or r.headers.get('allow','')
@@ -796,7 +804,7 @@ class VulnScanner:
                 "Desactivez TRACE. Limitez PUT/DELETE.", proof=f"Allow: {allow}"))
 
     def check_dir_listing(self):
-        print(f"\n{C.MAGENTA}[~] 6/30 Directory listing{C.END}")
+        print(f"\n{C.MAGENTA}[~] 6/38 Directory listing{C.END}")
         for d in ['/','/uploads/','/files/','/backup/','/images/','/admin/']:
             url = self.base_url + d
             r = self.req('GET', url)
@@ -808,7 +816,7 @@ class VulnScanner:
                         "Options -Indexes ou autoindex off.", proof=low[:120]))
 
     def check_forms(self):
-        print(f"\n{C.MAGENTA}[~] 7/30 Formulaires{C.END}")
+        print(f"\n{C.MAGENTA}[~] 7/38 Formulaires{C.END}")
         r = self.req('GET', self.base_url)
         if not r: return
         html = r.text
@@ -825,7 +833,7 @@ class VulnScanner:
                     proof=f"<form action='{act}' method='POST'>"))
 
     def check_form_vulns(self):
-        print(f"\n{C.MAGENTA}[~] 7b/30 Test formulaires POST{C.END}")
+        print(f"\n{C.MAGENTA}[~] 7b/38 Test formulaires POST{C.END}")
         r = self.req('GET', self.base_url)
         if not r: return
         for m in re.finditer(r'<form([^>]*)>(.*?)</form>', r.text, re.DOTALL|re.I):
@@ -865,7 +873,7 @@ class VulnScanner:
                     break
 
     def crawl_links(self, url=None):
-        print(f"\n{C.MAGENTA}[~] 8/30 Crawl{C.END}")
+        print(f"\n{C.MAGENTA}[~] 8/38 Crawl{C.END}")
         url = url or self.base_url
         r = self.req('GET', url)
         if not r: return []
@@ -901,7 +909,7 @@ class VulnScanner:
         return found
 
     def check_sqli(self, url, method='GET', params=None):
-        print(f"{C.MAGENTA}[~] 9/30 SQLi sur {url}{C.END}")
+        print(f"{C.MAGENTA}[~] 9/38 SQLi sur {url}{C.END}")
         if not params: return
         err_sigs = ["sql syntax","mysql_fetch","mysqli","sqlite","pg_query","ora-",
                     "unclosed quotation","you have an error in your sql","syntax error",
@@ -935,7 +943,7 @@ class VulnScanner:
                 "Requetes preparees.", proof=f"T={len(rt.text)} vs F={len(rf.text)}"))
 
     def check_xss(self, url, method='GET', params=None):
-        print(f"{C.MAGENTA}[~] 10/30 XSS reflechi sur {url}{C.END}")
+        print(f"{C.MAGENTA}[~] 10/38 XSS reflechi sur {url}{C.END}")
         if not params: return
         marker = "vx" + str(int(time.time()))[-5:]
         for pl in [f"<script>alert('{marker}')</script>",
@@ -950,7 +958,7 @@ class VulnScanner:
                     payload=pl, proof=pl)); return
 
     def check_idor(self, url, params):
-        print(f"{C.MAGENTA}[~] 12/30 IDOR sur {url}{C.END}")
+        print(f"{C.MAGENTA}[~] 12/38 IDOR sur {url}{C.END}")
         if not params: return
         # Ne tester que les params dont la valeur est un ID numerique
         # ET dont le nom contient un indice d'identifiant
@@ -986,7 +994,7 @@ class VulnScanner:
 
 
     def check_lfi(self, url, params):
-        print(f"{C.MAGENTA}[~] 13/30 LFI sur {url}{C.END}")
+        print(f"{C.MAGENTA}[~] 13/38 LFI sur {url}{C.END}")
         if not params:
             print(f"   {C.DIM}Aucun parametre, LFI ignore{C.END}")
             return
@@ -1004,13 +1012,21 @@ class VulnScanner:
             if not r: continue
             m = re.search(sig, r.text)
             if m:
+                # Verifier que c'est du vrai Base64 (pas un chemin CSS/HTML)
+                match_text = m.group(0)
+                if 'php://filter' in pl:
+                    # Doit contenir 50+ chars Base64 consecutifs
+                    b64_match = re.search(r'[A-Za-z0-9+/=]{50,}', r.text)
+                    if not b64_match:
+                        continue  # faux positif
+                    match_text = b64_match.group(0)[:120]
                 self.add(Finding("LFI", 'CRITICAL', url, f"Payload: {pl}",
                     "Lecture fichiers serveur.",
                     "Whitelist + basename() + realpath().",
-                    payload=pl, proof=m.group(0)[:120])); return
+                    payload=pl, proof=match_text)); return
 
     def check_open_redirect(self, url, params):
-        print(f"{C.MAGENTA}[~] 14/30 Open Redirect sur {url}{C.END}")
+        print(f"{C.MAGENTA}[~] 14/38 Open Redirect sur {url}{C.END}")
         if not params: return
         evil = "https://evil.example.com/"
         for k in params:
@@ -1023,7 +1039,7 @@ class VulnScanner:
                         "Whitelist des domaines.", proof=f"Location: {loc}"))
 
     def check_cors(self):
-        print(f"\n{C.MAGENTA}[~] 15/30 CORS{C.END}")
+        print(f"\n{C.MAGENTA}[~] 15/38 CORS{C.END}")
         evil = "https://evil.example.com"
         r = self.req('GET', self.base_url, headers={'Origin': evil})
         if not r: return
@@ -1039,7 +1055,7 @@ class VulnScanner:
                 "Whitelist.", proof=f"ACAO: {acao}"))
 
     def check_info_disclosure(self):
-        print(f"\n{C.MAGENTA}[~] 16/30 Info disclosure{C.END}")
+        print(f"\n{C.MAGENTA}[~] 16/38 Info disclosure{C.END}")
         r = self.req('GET', self.base_url + '/404test-' + str(int(time.time())))
         if r and r.status_code == 404:
             low = r.text.lower()
@@ -1053,7 +1069,7 @@ class VulnScanner:
                         proof=m.group(0) if m else sig)); break
 
     def scan_protected(self, paths):
-        print(f"\n{C.MAGENTA}[~] 17/30 Scan pages protegees{C.END}")
+        print(f"\n{C.MAGENTA}[~] 17/38 Scan pages protegees{C.END}")
         for p in paths:
             url = urljoin(self.base_url + '/', p.lstrip('/'))
             r = self.req('GET', url)
