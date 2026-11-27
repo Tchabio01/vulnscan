@@ -27,6 +27,32 @@ __version__ = "3.4.0"
 OS_NAME = platform.system()  # Linux, Windows, Darwin
 
 
+import socket
+from requests.adapters import HTTPAdapter as _BaseAdapter
+
+
+class IPv4Adapter(_BaseAdapter):
+    """Force IPv4 pour eviter les echecs IPv6 en VM."""
+    def init_poolmanager(self, *args, **kwargs):
+        kwargs["socket_options"] = [(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)]
+        return super().init_poolmanager(*args, **kwargs)
+
+    def send(self, request, **kwargs):
+        import urllib3.util.connection as urllib3_cn
+        orig = urllib3_cn.allowed_gai_family
+        urllib3_cn.allowed_gai_family = lambda: socket.AF_INET
+        try:
+            return super().send(request, **kwargs)
+        finally:
+            urllib3_cn.allowed_gai_family = orig
+
+
+# Forcer IPv4 globalement (VM NAT : IPv6 ne repond pas)
+import socket as _socket
+import urllib3.util.connection as _urllib3_cn
+_urllib3_cn.allowed_gai_family = lambda: _socket.AF_INET
+
+
 class C:
     RED='\033[91m'; GREEN='\033[92m'; YELLOW='\033[93m'
     BLUE='\033[94m'; MAGENTA='\033[95m'; CYAN='\033[96m'
@@ -51,6 +77,8 @@ class VulnScanner:
         self.delay = delay; self.timeout = timeout; self.verbose = verbose
         self.session = requests.Session()
         self.session.headers['User-Agent'] = UA
+        self.session.mount('http://', IPv4Adapter())
+        self.session.mount('https://', IPv4Adapter())
         self.session.verify = False
         self.findings = []
         self.visited = set()
@@ -70,8 +98,13 @@ class VulnScanner:
         except KeyboardInterrupt:
             raise
         except requests.exceptions.RequestException as e:
+            # Toujours logguer l'erreur (pas seulement en verbose)
+            msg = f"{e.__class__.__name__}: {str(e)[:120]}"
             if self.verbose:
-                self.log(f"Err {url}: {e.__class__.__name__}", 'err')
+                self.log(f"Err {url}: {msg}", 'err')
+            else:
+                # Garder une trace pour debug
+                self._last_error = msg
             return None
 
     def add(self, f):
@@ -110,9 +143,12 @@ class VulnScanner:
     def ping(self):
         """Verifie que la cible repond avant de lancer le scan."""
         print(f"\n{C.MAGENTA}[~] 0/38 Test de connectivite{C.END}")
+        self._last_error = None
         r = self.req('GET', self.base_url)
         if not r:
             self.log(f"Cible injoignable : {self.base_url}", 'err')
+            if self._last_error:
+                self.log(f"Raison : {self._last_error}", 'warn')
             self.log("Verifiez l'URL, le reseau, ou un eventuel pare-feu.", 'warn')
             return False
         elapsed = r.elapsed.total_seconds() if hasattr(r, 'elapsed') else 0
@@ -1259,16 +1295,19 @@ def validate_url(u):
     """Valide et normalise une URL. Retourne None si invalide."""
     if not u:
         return None
-    if u.count('://') > 1:
+    try:
+        if u.count('://') > 1:
+            return None
+        if '://' in u and not u.startswith(('http://', 'https://')):
+            return None
+        parsed = urlparse(u)
+        if not parsed.netloc:
+            return None
+        if any(c in parsed.netloc for c in ' *<>"'):
+            return None
+        return u.rstrip('/')
+    except (ValueError, AttributeError):
         return None
-    if '://' in u and not u.startswith(('http://', 'https://')):
-        return None
-    parsed = urlparse(u)
-    if not parsed.netloc:
-        return None
-    if any(c in parsed.netloc for c in ' *<>"'):
-        return None
-    return u.rstrip('/')
 
 
 def ask_url():
