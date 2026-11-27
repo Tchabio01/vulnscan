@@ -235,11 +235,11 @@ class VulnScanner:
         
         # CMS
         cms_sigs = {
-            'WordPress': ['wp-content', 'wp-includes', 'wordpress'],
-            'Joomla': ['joomla', '/components/com_'],
-            'Drupal': ['drupal', 'sites/default/files'],
-            'Magento': ['magento', 'mage/'],
-            'PrestaShop': ['prestashop'],
+            'WordPress': ['/wp-content/', '/wp-includes/', 'wp-json'],
+            'Joomla': ['/components/com_', 'joomla!'],
+            'Drupal': ['/sites/default/files/', 'drupal.settings'],
+            'Magento': ['/skin/frontend/', 'mage/cookies', 'magento'],
+            'PrestaShop': ['/modules/ps_', 'prestashop'],
         }
         for cms, sigs in cms_sigs.items():
             if any(sig in body for sig in sigs):
@@ -375,6 +375,8 @@ class VulnScanner:
             url = f"{self.base_url}{ep}"
             r = self.req('GET', url)
             if not r or r.status_code not in (200, 201, 401, 403): continue
+            if self._is_soft_404(r):
+                continue
             ct = r.headers.get('Content-Type', '').lower()
             if 'text/html' in ct and 'not found' in r.text.lower()[:500]: continue
             sev = 'MEDIUM' if any(x in ep for x in ['swagger', 'graphql', 'openapi', 'api-docs']) else 'LOW'
@@ -581,8 +583,13 @@ class VulnScanner:
             r = self.req('GET', url)
             if not r or r.status_code != 200 or len(r.content) == 0:
                 continue
+            if self._is_soft_404(r):
+                continue
             ct = r.headers.get('Content-Type', '').lower()
             if 'text/html' in ct and len(r.content) < 2000:
+                continue
+            # Un backup n'est jamais du text/html
+            if 'text/html' in ct:
                 continue
             self.add(Finding(f"Backup expose: /{f}", 'HIGH', url,
                 f"HTTP 200 - {len(r.content)} bytes - {ct}",
@@ -724,6 +731,25 @@ class VulnScanner:
                     f"HTTP 200 - {len(r.content)}b", "Fichier sensible expose.",
                     "Supprimez ou protegez.", proof=r.text[:100]))
 
+    def _baseline_fingerprint(self):
+        """Retourne (len, hash) de la page d'accueil pour detecter les soft 404."""
+        r = self.req('GET', self.base_url)
+        if not r:
+            return None
+        import hashlib
+        h = hashlib.sha256(r.content).hexdigest()[:16]
+        return (len(r.content), h)
+
+    def _is_soft_404(self, r):
+        """Detecte un soft 404 (page identique a l'accueil)."""
+        if not hasattr(self, '_baseline') or self._baseline is None:
+            self._baseline = self._baseline_fingerprint()
+        if not self._baseline or not r:
+            return False
+        import hashlib
+        h = hashlib.sha256(r.content).hexdigest()[:16]
+        return (len(r.content), h) == self._baseline
+
     def check_headers(self):
         print(f"\n{C.MAGENTA}[~] 1/38 En-tetes de securite{C.END}")
         r = self.req('GET', self.base_url)
@@ -760,6 +786,12 @@ class VulnScanner:
             if not r or r.status_code != 200 or len(r.content) == 0: continue
             ct = r.headers.get('Content-Type','').lower()
             body = r.text[:200]
+            # Ignorer les soft 404 (SPA catch-all)
+            if self._is_soft_404(r):
+                continue
+            # Un fichier sensible n'est jamais du text/html
+            if 'text/html' in ct and any(x in f for x in ['.git', '.env', '.htaccess', '.htpasswd', 'backup', 'database', 'dump', '.sql', '.zip', '.bak']):
+                continue
             if 'text/html' in ct and ('not found' in body.lower() or '404' in body.lower()):
                 if len(r.content) < 2000: continue
             sev = ('CRITICAL' if any(x in f for x in ['.env','.git/config','.htpasswd','wp-config','backup.sql'])
